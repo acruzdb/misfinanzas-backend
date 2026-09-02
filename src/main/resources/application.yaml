@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: misfinanzas
+  datasource:
+    url: jdbc:postgresql://localhost:5432/misfinanzas
+    username: postgres
+    password: ${DB_PASSWORD:devpass}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: true
+
+logging:
+  level:
+    org.hibernate.SQL: debug
