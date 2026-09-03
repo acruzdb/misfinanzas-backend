@@ -6,6 +6,17 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
+/**
+ * Datos de entrada para crear un movimiento.
+ *
+ * @param type            {@code "income"} o {@code "expense"}
+ * @param amount          importe, siempre positivo
+ * @param transactionDate fecha del movimiento, no puede ser futura
+ * @param description     descripción libre, opcional
+ * @param categoryId      categoría asociada, opcional
+ * @param householdId     household al que pertenece el movimiento;
+ *                         {@code null} significa movimiento personal
+ */
 public record CreateTransactionRequest(
 
         @NotNull(message = "El tipo es obligatorio")
@@ -22,5 +33,7 @@ public record CreateTransactionRequest(
 
         String description,
 
-        UUID categoryId
+        UUID categoryId,
+
+        UUID householdId
 ) {}

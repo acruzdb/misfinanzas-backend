@@ -75,6 +75,19 @@ public class Category {
         this.kind = kind;
     }
 
+    /**
+     * Crea una categoría compartida para un household.
+     *
+     * @param householdId id del household propietario
+     * @param name        nombre visible, p.ej. "Alquiler"
+     * @param kind        {@code "income"} o {@code "expense"}
+     */
+    public Category(UUID householdId, String name, String kind) {
+        this.householdId = householdId;
+        this.name = name;
+        this.kind = kind;
+    }
+
     @PrePersist
     void onCreate() {
         this.createdAt = OffsetDateTime.now();

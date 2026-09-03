@@ -1,12 +1,12 @@
-package com.acruzdb.misfinanzas.transactions.infrastructure;
+package com.acruzdb.misfinanzas.categories.infrastructure;
 
 import com.acruzdb.misfinanzas.auth.domain.User;
 import com.acruzdb.misfinanzas.auth.infrastructure.AuthenticatedUser;
 import com.acruzdb.misfinanzas.auth.infrastructure.JwtService;
 import com.acruzdb.misfinanzas.auth.infrastructure.UserRepository;
-import com.acruzdb.misfinanzas.transactions.application.TransactionService;
-import com.acruzdb.misfinanzas.transactions.dto.CreateTransactionRequest;
-import com.acruzdb.misfinanzas.transactions.dto.TransactionResponse;
+import com.acruzdb.misfinanzas.categories.application.CategoryService;
+import com.acruzdb.misfinanzas.categories.dto.CategoryResponse;
+import com.acruzdb.misfinanzas.categories.dto.CreateCategoryRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,32 +20,29 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.ObjectMapper;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * Test de la capa web (slice) para {@link TransactionController}.
+ * Test de la capa web (slice) para {@link CategoryController}.
  * <p>
- * Los filtros de seguridad reales están desactivados ({@code addFilters
- * = false}), así que la autenticación se simula rellenando a mano el
- * {@link SecurityContextHolder} en {@link #setUpAuthentication()} —
- * exactamente el mismo {@link AuthenticatedUser} que dejaría ahí el
- * {@code JwtAuthFilter} tras validar un JWT real.
+ * Igual que en {@code TransactionControllerTest}: filtros de seguridad
+ * desactivados, autenticación simulada a mano en el
+ * {@link SecurityContextHolder}, y {@link JwtService} mockeado para que
+ * {@code JwtAuthFilter} pueda construirse dentro del slice aunque no
+ * llegue a ejecutarse.
  */
-@WebMvcTest(TransactionController.class)
+@WebMvcTest(CategoryController.class)
 @AutoConfigureMockMvc(addFilters = false)
-class TransactionControllerTest {
+class CategoryControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -54,7 +51,7 @@ class TransactionControllerTest {
     private ObjectMapper objectMapper;
 
     @MockitoBean
-    private TransactionService transactionService;
+    private CategoryService categoryService;
 
     @MockitoBean
     private UserRepository userRepository;
@@ -76,79 +73,88 @@ class TransactionControllerTest {
 
     @AfterEach
     void clearAuthentication() {
-        // Evita que el usuario simulado de un test "se filtre" al siguiente,
-        // ya que el SecurityContextHolder vive en un ThreadLocal compartido
-        // entre tests que corren en el mismo hilo.
         SecurityContextHolder.clearContext();
     }
 
     @Test
-    @DisplayName("POST /api/transactions devuelve 201 con el movimiento creado")
+    @DisplayName("POST /api/categories devuelve 201 con la categoría creada")
     void create_devuelve201() throws Exception {
         User user = new User("alex@test.com", null, "Alex");
         when(userRepository.findById(authenticatedUserId)).thenReturn(Optional.of(user));
 
-        TransactionResponse fakeResponse = new TransactionResponse(
-                UUID.randomUUID(), "expense", new BigDecimal("45.90"), "EUR",
-                "Mercadona", LocalDate.now(), null, null
+        CategoryResponse fakeResponse = new CategoryResponse(
+                UUID.randomUUID(), "Suscripciones", "expense", "#6B7280", null, false
         );
-        when(transactionService.create(eq(user), any())).thenReturn(fakeResponse);
+        when(categoryService.create(eq(user), any())).thenReturn(fakeResponse);
 
-        // Movimiento personal: sin categoría ni household, para mantener
-        // el test centrado en el "camino feliz" simple del POST.
-        CreateTransactionRequest request = new CreateTransactionRequest(
-                "expense", new BigDecimal("45.90"), LocalDate.now(), "Mercadona", null, null
-        );
+        CreateCategoryRequest request = new CreateCategoryRequest("Suscripciones", "expense", null, null, null);
 
-        mockMvc.perform(post("/api/transactions")
+        mockMvc.perform(post("/api/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.type").value("expense"))
-                .andExpect(jsonPath("$.amount").value(45.90))
-                .andExpect(jsonPath("$.description").value("Mercadona"));
+                .andExpect(jsonPath("$.name").value("Suscripciones"))
+                .andExpect(jsonPath("$.kind").value("expense"));
     }
 
     @Test
-    @DisplayName("POST /api/transactions devuelve 400 si el tipo no es income ni expense")
+    @DisplayName("POST /api/categories devuelve 400 si el tipo no es income ni expense")
     void create_devuelve400SiTipoInvalido() throws Exception {
         String jsonInvalido = """
-                {"type":"factura","amount":45.90,"transactionDate":"2026-09-01"}
+                {"name":"Rara","kind":"factura"}
                 """;
 
-        mockMvc.perform(post("/api/transactions")
+        mockMvc.perform(post("/api/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonInvalido))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    @DisplayName("POST /api/transactions devuelve 404 si el usuario autenticado ya no existe en BD")
+    @DisplayName("POST /api/categories devuelve 404 si el usuario autenticado ya no existe en BD")
     void create_devuelve404SiUsuarioNoExiste() throws Exception {
         when(userRepository.findById(authenticatedUserId)).thenReturn(Optional.empty());
 
-        CreateTransactionRequest request = new CreateTransactionRequest(
-                "expense", new BigDecimal("10.00"), LocalDate.now(), null, null, null
-        );
+        CreateCategoryRequest request = new CreateCategoryRequest("Ocio", "expense", null, null, null);
 
-        mockMvc.perform(post("/api/transactions")
+        mockMvc.perform(post("/api/categories")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @DisplayName("GET /api/transactions devuelve 200 con la lista de movimientos del usuario autenticado")
+    @DisplayName("GET /api/categories devuelve 200 con las categorías visibles para el usuario")
     void list_devuelve200ConLista() throws Exception {
-        TransactionResponse response = new TransactionResponse(
-                UUID.randomUUID(), "income", new BigDecimal("2450.00"), "EUR",
-                "Nómina", LocalDate.now(), null, null
+        CategoryResponse response = new CategoryResponse(
+                UUID.randomUUID(), "Comida", "expense", "#EF4444", null, true
         );
-        when(transactionService.listForUser(authenticatedUserId)).thenReturn(List.of(response));
+        when(categoryService.listForUser(authenticatedUserId)).thenReturn(List.of(response));
 
-        mockMvc.perform(get("/api/transactions"))
+        mockMvc.perform(get("/api/categories"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].type").value("income"))
+                .andExpect(jsonPath("$[0].name").value("Comida"))
                 .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(1)));
+    }
+
+    @Test
+    @DisplayName("DELETE /api/categories/{id} devuelve 204 si se borra correctamente")
+    void delete_devuelve204() throws Exception {
+        UUID categoryId = UUID.randomUUID();
+        doNothing().when(categoryService).delete(categoryId, authenticatedUserId);
+
+        mockMvc.perform(delete("/api/categories/{id}", categoryId))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @DisplayName("DELETE /api/categories/{id} devuelve 409 si es una categoría de sistema")
+    void delete_devuelve409SiEsDeSistema() throws Exception {
+        UUID categoryId = UUID.randomUUID();
+        doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Las categorías de sistema no se pueden borrar"))
+                .when(categoryService).delete(categoryId, authenticatedUserId);
+
+        mockMvc.perform(delete("/api/categories/{id}", categoryId))
+                .andExpect(status().isConflict());
     }
 }

@@ -5,6 +5,7 @@ import com.acruzdb.misfinanzas.categories.domain.Category;
 import com.acruzdb.misfinanzas.categories.dto.CategoryResponse;
 import com.acruzdb.misfinanzas.categories.dto.CreateCategoryRequest;
 import com.acruzdb.misfinanzas.categories.infrastructure.CategoryRepository;
+import com.acruzdb.misfinanzas.shared.infrastructure.HouseholdMemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,12 +32,15 @@ class CategoryServiceTest {
     @Mock
     private CategoryRepository categoryRepository;
 
+    @Mock
+    private HouseholdMemberRepository householdMemberRepository;
+
     private CategoryService categoryService;
     private User testUser;
 
     @BeforeEach
     void setUp() throws Exception {
-        categoryService = new CategoryService(categoryRepository);
+        categoryService = new CategoryService(categoryRepository,householdMemberRepository);
         testUser = new User("alex@test.com", null, "Alex");
         setId(testUser, UUID.randomUUID());
     }
@@ -44,7 +48,7 @@ class CategoryServiceTest {
     @Test
     @DisplayName("create() guarda la categoría con los valores por defecto si no se especifica color")
     void create_usaColorPorDefectoSiNoSeEspecifica() {
-        CreateCategoryRequest request = new CreateCategoryRequest("Suscripciones", "expense", null, null);
+        CreateCategoryRequest request = new CreateCategoryRequest("Suscripciones", "expense", null, null, null);
         when(categoryRepository.save(any(Category.class))).thenAnswer(inv -> inv.getArgument(0));
 
         CategoryResponse response = categoryService.create(testUser, request);
@@ -54,9 +58,40 @@ class CategoryServiceTest {
     }
 
     @Test
+    @DisplayName("create() crea una categoría de household si el usuario es miembro")
+    void create_creaCategoriaDeHouseholdSiEsMiembro() {
+        UUID householdId = UUID.randomUUID();
+        when(householdMemberRepository.findByHouseholdIdAndUserId(householdId, testUser.getId()))
+                .thenReturn(Optional.of(mock(com.acruzdb.misfinanzas.shared.domain.HouseholdMember.class)));
+        when(categoryRepository.save(any(Category.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreateCategoryRequest request = new CreateCategoryRequest("Alquiler", "expense", null, null, householdId);
+
+        CategoryResponse response = categoryService.create(testUser, request);
+
+        assertThat(response.name()).isEqualTo("Alquiler");
+    }
+
+    @Test
+    @DisplayName("create() lanza 403 si el usuario no pertenece al household indicado")
+    void create_lanza403SiNoPerteneceAlHousehold() {
+        UUID householdId = UUID.randomUUID();
+        when(householdMemberRepository.findByHouseholdIdAndUserId(householdId, testUser.getId()))
+                .thenReturn(Optional.empty());
+
+        CreateCategoryRequest request = new CreateCategoryRequest("Alquiler", "expense", null, null, householdId);
+
+        assertThatThrownBy(() -> categoryService.create(testUser, request))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("No perteneces");
+
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("delete() lanza 409 si la categoría es de sistema")
     void delete_lanza409SiEsDeSistema() {
-        Category systemCategory = new Category(null, "Comida", "expense");
+        Category systemCategory = new Category((User) null, "Comida", "expense");
         UUID categoryId = UUID.randomUUID();
         markAsSystem(systemCategory);
         when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(systemCategory));

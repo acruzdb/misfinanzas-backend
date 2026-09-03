@@ -5,6 +5,8 @@ import com.acruzdb.misfinanzas.categories.domain.Category;
 import com.acruzdb.misfinanzas.categories.dto.CategoryResponse;
 import com.acruzdb.misfinanzas.categories.dto.CreateCategoryRequest;
 import com.acruzdb.misfinanzas.categories.infrastructure.CategoryRepository;
+import com.acruzdb.misfinanzas.shared.infrastructure.HouseholdMemberRepository;
+import com.acruzdb.misfinanzas.shared.infrastructure.HouseholdRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,20 +28,33 @@ public class CategoryService {
 
     private final CategoryRepository categoryRepository;
 
-    public CategoryService(CategoryRepository categoryRepository) {
+    private final HouseholdMemberRepository householdMemberRepository;
+
+    public CategoryService(CategoryRepository categoryRepository, HouseholdMemberRepository householdMemberRepository) {
         this.categoryRepository = categoryRepository;
+        this.householdMemberRepository = householdMemberRepository;
     }
 
     /**
-     * Crea una nueva categoría personal para el usuario.
+     * Crea una nueva categoría, personal o de household según venga
+     * {@code householdId} en la petición.
      *
-     * @param user    propietario de la categoría
+     * @param user    usuario que hace la petición
      * @param request datos validados de la categoría
      * @return la categoría creada
+     * @throws org.springframework.web.server.ResponseStatusException 403
+     *         si se indica un householdId del que el usuario no es miembro
      */
     @Transactional
     public CategoryResponse create(User user, CreateCategoryRequest request) {
-        Category category = new Category(user, request.name(), request.kind());
+        Category category;
+        if (request.householdId() != null) {
+            validateHouseholdMembership(request.householdId(), user.getId());
+            category = new Category(request.householdId(), request.name(), request.kind());
+        } else {
+            category = new Category(user, request.name(), request.kind());
+        }
+
         if (request.colorHex() != null) {
             category.setColorHex(request.colorHex());
         }
@@ -47,6 +62,13 @@ public class CategoryService {
 
         Category saved = categoryRepository.save(category);
         return CategoryResponse.from(saved);
+    }
+
+    private void validateHouseholdMembership(UUID householdId, UUID userId) {
+        boolean isMember = householdMemberRepository.findByHouseholdIdAndUserId(householdId, userId).isPresent();
+        if (!isMember) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No perteneces a ese household");
+        }
     }
 
     /**

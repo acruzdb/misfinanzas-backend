@@ -4,13 +4,18 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import java.util.UUID;
+
 /**
- * Datos de entrada para crear una categoría personal.
+ * Datos de entrada para crear una categoría, personal o de household.
  *
- * @param name     nombre visible, entre 1 y 60 caracteres
- * @param kind     {@code "income"} o {@code "expense"}
- * @param colorHex color en formato hexadecimal (p.ej. {@code #EF4444}), opcional
- * @param icon     identificador de icono, opcional
+ * @param name       nombre visible, entre 1 y 60 caracteres
+ * @param kind       {@code "income"} o {@code "expense"}
+ * @param colorHex   color en formato hexadecimal (p.ej. {@code #EF4444}), opcional
+ * @param icon       identificador de icono, opcional
+ * @param householdId si se indica, la categoría se crea como compartida
+ *                    para ese household en vez de personal; requiere que
+ *                    el usuario sea miembro
  */
 public record CreateCategoryRequest(
 
@@ -25,5 +30,7 @@ public record CreateCategoryRequest(
         @Pattern(regexp = "^#[0-9A-Fa-f]{6}$", message = "El color debe ser hexadecimal, p.ej. #EF4444")
         String colorHex,
 
-        String icon
+        String icon,
+
+        UUID householdId
 ) {}
