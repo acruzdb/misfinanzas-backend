@@ -16,3 +16,12 @@ spring:
 logging:
   level:
     org.hibernate.SQL: debug
+
+misfinanzas:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:cambia-este-valor-en-produccion-por-uno-largo-y-aleatorio}
+      access-token-minutes: 15
+      refresh-token-days: 30
+    google:
+      client-id: 296166856263-u9ubd4bmvn1nbsnj60iffebpu70p56r9.apps.googleusercontent.com

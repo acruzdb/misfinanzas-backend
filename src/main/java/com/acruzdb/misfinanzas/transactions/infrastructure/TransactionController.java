@@ -1,6 +1,7 @@
 package com.acruzdb.misfinanzas.transactions.infrastructure;
 
 import com.acruzdb.misfinanzas.auth.domain.User;
+import com.acruzdb.misfinanzas.auth.infrastructure.AuthenticatedUser;
 import com.acruzdb.misfinanzas.auth.infrastructure.UserRepository;
 import com.acruzdb.misfinanzas.transactions.application.TransactionService;
 import com.acruzdb.misfinanzas.transactions.dto.CreateTransactionRequest;
@@ -8,6 +9,7 @@ import com.acruzdb.misfinanzas.transactions.dto.TransactionResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -38,15 +40,15 @@ public class TransactionController {
     /**
      * Crea un nuevo movimiento para el usuario indicado.
      *
-     * @param userId  id del usuario propietario (temporal, ver nota de clase)
+     * @param principal  id del usuario propietario (temporal, ver nota de clase)
      * @param request datos del movimiento, validados con Bean Validation
      * @return 201 Created con el movimiento creado
      */
     @PostMapping
     public ResponseEntity<TransactionResponse> create(
-            @RequestParam UUID userId,
+            @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody CreateTransactionRequest request) {
-        User user = userRepository.findById(userId)
+        User user = userRepository.findById(principal.id())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
         TransactionResponse response = transactionService.create(user, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -55,37 +57,37 @@ public class TransactionController {
     /**
      * Lista los movimientos del usuario, del más reciente al más antiguo.
      *
-     * @param userId id del usuario (temporal, ver nota de clase)
+     * @param principal id del usuario (temporal, ver nota de clase)
      * @return 200 OK con la lista de movimientos
      */
     @GetMapping
-    public ResponseEntity<List<TransactionResponse>> list(@RequestParam UUID userId) {
-        return ResponseEntity.ok(transactionService.listForUser(userId));
+    public ResponseEntity<List<TransactionResponse>> list(@AuthenticationPrincipal AuthenticatedUser principal) {
+        return ResponseEntity.ok(transactionService.listForUser(principal.id()));
     }
 
     /**
      * Recupera un movimiento concreto por id.
      *
      * @param id      id del movimiento
-     * @param userId  id del usuario solicitante (temporal, ver nota de clase)
+     * @param principal  id del usuario solicitante (temporal, ver nota de clase)
      * @return 200 OK con el movimiento, o 404 si no existe / no es suyo
      */
     @GetMapping("/{id}")
     public ResponseEntity<TransactionResponse> getById(
-            @PathVariable UUID id, @RequestParam UUID userId) {
-        return ResponseEntity.ok(transactionService.getById(id, userId));
+            @PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser principal) {
+        return ResponseEntity.ok(transactionService.getById(id, principal.id()));
     }
 
     /**
      * Elimina un movimiento.
      *
      * @param id      id del movimiento a borrar
-     * @param userId  id del usuario solicitante (temporal, ver nota de clase)
+     * @param principal  id del usuario solicitante (temporal, ver nota de clase)
      * @return 204 No Content si se borró correctamente
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable UUID id, @RequestParam UUID userId) {
-        transactionService.delete(id, userId);
+    public ResponseEntity<Void> delete(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser principal) {
+        transactionService.delete(id, principal.id());
         return ResponseEntity.noContent().build();
     }
 }
