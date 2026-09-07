@@ -1,16 +1,12 @@
 package com.acruzdb.misfinanzas.statements.application;
 
+import com.acruzdb.misfinanzas.statements.TestExcelFactory;
 import com.acruzdb.misfinanzas.statements.dto.StatementPreviewResponse;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -19,10 +15,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Tests de {@link ExcelParsingService}.
  * <p>
- * A diferencia de los tests de Service habituales, aquí no hay
- * repositorios que mockear: la propia clase bajo prueba solo depende
+ * No hay repositorios que mockear: la clase bajo prueba solo depende
  * de Apache POI, así que generamos ficheros .xlsx reales en memoria
- * (con la misma librería) en vez de simular nada con Mockito.
+ * (con {@link TestExcelFactory}) en vez de simular nada con Mockito.
  */
 class ExcelParsingServiceTest {
 
@@ -31,7 +26,7 @@ class ExcelParsingServiceTest {
     @Test
     @DisplayName("preview() detecta automáticamente fecha, descripción e importe por el nombre de cabecera")
     void preview_detectaMapeoPorCabeceras() throws IOException {
-        MockMultipartFile file = buildExcel(
+        MockMultipartFile file = TestExcelFactory.buildExcel(
                 new String[]{"Fecha", "Concepto", "Importe", "Saldo"},
                 new Object[][]{
                         {"01/09/2026", "Mercadona", "-64.20", "3056.35"},
@@ -51,7 +46,7 @@ class ExcelParsingServiceTest {
     @Test
     @DisplayName("preview() no reconoce cabeceras en un idioma o formato inusual, y deja el mapeo a null")
     void preview_dejaSinMapearCabecerasNoReconocidas() throws IOException {
-        MockMultipartFile file = buildExcel(
+        MockMultipartFile file = TestExcelFactory.buildExcel(
                 new String[]{"Transaction Date", "Merchant", "Value"},
                 new Object[][]{{"01/09/2026", "Amazon", "-30.00"}}
         );
@@ -76,33 +71,5 @@ class ExcelParsingServiceTest {
         assertThatThrownBy(() -> service.preview(file))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("No se pudo leer");
-    }
-
-    /**
-     * Construye un .xlsx real en memoria con las cabeceras y filas dadas,
-     * envuelto en un {@link MockMultipartFile} listo para pasar al servicio
-     * — así probamos contra bytes de Excel de verdad, no una simulación.
-     */
-    private MockMultipartFile buildExcel(String[] headers, Object[][] rows) throws IOException {
-        try (Workbook workbook = new XSSFWorkbook()) {
-            Sheet sheet = workbook.createSheet("Movimientos");
-
-            Row headerRow = sheet.createRow(0);
-            for (int i = 0; i < headers.length; i++) {
-                headerRow.createCell(i).setCellValue(headers[i]);
-            }
-
-            for (int r = 0; r < rows.length; r++) {
-                Row row = sheet.createRow(r + 1);
-                for (int c = 0; c < rows[r].length; c++) {
-                    row.createCell(c).setCellValue(String.valueOf(rows[r][c]));
-                }
-            }
-
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            workbook.write(out);
-            return new MockMultipartFile("file", "test.xlsx",
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out.toByteArray());
-        }
     }
 }
