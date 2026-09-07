@@ -8,16 +8,20 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 /**
- * Configuración de seguridad HTTP definitiva (sustituye a la versión
- * temporal del Paso 2, que dejaba todo abierto).
+ * Configuración de seguridad HTTP definitiva.
  * <p>
- * La API es completamente stateless: no se crean sesiones HTTP, la
- * autenticación viaja en cada petición vía JWT en el header
- * {@code Authorization}. Solo {@code /api/auth/**} queda público
- * (login, refresh); todo lo demás bajo {@code /api/**} requiere un
- * access token válido.
+ * Incluye configuración CORS explícita: el frontend (React, servido
+ * desde un origen distinto en desarrollo) necesita permiso expreso
+ * del navegador para poder llamar a esta API — sin esto, el navegador
+ * bloquea la petición antes de que llegue al backend, aunque curl o
+ * Postman sí funcionen (esas herramientas no aplican CORS).
  */
 @Configuration
 public class SecurityConfig {
@@ -31,6 +35,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -41,5 +46,27 @@ public class SecurityConfig {
                 )
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
+    }
+
+    /**
+     * Define qué orígenes, métodos y headers puede usar un navegador
+     * para llamar a esta API desde fuera de nuestro propio dominio.
+     * <p>
+     * En desarrollo solo permitimos el origen de Vite (localhost:5173).
+     * Cuando despleguemos, habrá que añadir aquí el dominio real de
+     * producción — nunca usar "*" (todos los orígenes) en una API que
+     * maneja datos financieros autenticados.
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 }
