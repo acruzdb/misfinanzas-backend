@@ -3,6 +3,7 @@ package com.acruzdb.misfinanzas.categories.infrastructure;
 import com.acruzdb.misfinanzas.auth.domain.User;
 import com.acruzdb.misfinanzas.auth.infrastructure.AuthenticatedUser;
 import com.acruzdb.misfinanzas.auth.infrastructure.JwtService;
+import com.acruzdb.misfinanzas.auth.infrastructure.RateLimitFilter;
 import com.acruzdb.misfinanzas.auth.infrastructure.UserRepository;
 import com.acruzdb.misfinanzas.categories.application.CategoryService;
 import com.acruzdb.misfinanzas.categories.dto.CategoryResponse;
@@ -58,6 +59,9 @@ class CategoryControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private RateLimitFilter rateLimitFilter;
 
     private UUID authenticatedUserId;
 

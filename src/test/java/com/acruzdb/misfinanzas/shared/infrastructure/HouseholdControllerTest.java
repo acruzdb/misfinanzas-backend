@@ -3,6 +3,7 @@ package com.acruzdb.misfinanzas.shared.infrastructure;
 import com.acruzdb.misfinanzas.auth.domain.User;
 import com.acruzdb.misfinanzas.auth.infrastructure.AuthenticatedUser;
 import com.acruzdb.misfinanzas.auth.infrastructure.JwtService;
+import com.acruzdb.misfinanzas.auth.infrastructure.RateLimitFilter;
 import com.acruzdb.misfinanzas.auth.infrastructure.UserRepository;
 import com.acruzdb.misfinanzas.shared.application.HouseholdService;
 import com.acruzdb.misfinanzas.shared.dto.AddMemberRequest;
@@ -59,6 +60,9 @@ class HouseholdControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private RateLimitFilter rateLimitFilter;
 
     private UUID authenticatedUserId;
 

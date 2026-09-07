@@ -3,7 +3,9 @@ package com.acruzdb.misfinanzas.transactions.infrastructure;
 import com.acruzdb.misfinanzas.auth.domain.User;
 import com.acruzdb.misfinanzas.auth.infrastructure.AuthenticatedUser;
 import com.acruzdb.misfinanzas.auth.infrastructure.JwtService;
+import com.acruzdb.misfinanzas.auth.infrastructure.RateLimitFilter;
 import com.acruzdb.misfinanzas.auth.infrastructure.UserRepository;
+import com.acruzdb.misfinanzas.transactions.application.MonthlySummaryService;
 import com.acruzdb.misfinanzas.transactions.application.TransactionService;
 import com.acruzdb.misfinanzas.transactions.dto.CreateTransactionRequest;
 import com.acruzdb.misfinanzas.transactions.dto.TransactionResponse;
@@ -61,6 +63,12 @@ class TransactionControllerTest {
 
     @MockitoBean
     private JwtService jwtService;
+
+    @MockitoBean
+    private MonthlySummaryService monthlySummaryService;
+
+    @MockitoBean
+    private RateLimitFilter rateLimitFilter;
 
     private UUID authenticatedUserId;
 

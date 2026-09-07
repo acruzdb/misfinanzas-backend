@@ -1,8 +1,11 @@
 package com.acruzdb.misfinanzas.shared.config;
 
+import com.acruzdb.misfinanzas.auth.infrastructure.CorsProperties;
 import com.acruzdb.misfinanzas.auth.infrastructure.JwtAuthFilter;
+import com.acruzdb.misfinanzas.auth.infrastructure.RateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -28,8 +31,14 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+    private final CorsProperties corsProperties;
+
+    private final RateLimitFilter rateLimitFilter;
+
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, CorsProperties corsProperties, RateLimitFilter rateLimitFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.corsProperties = corsProperties;
+        this.rateLimitFilter = rateLimitFilter;
     }
 
     @Bean
@@ -41,9 +50,11 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .anyRequest().authenticated()
                 )
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
@@ -60,7 +71,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
+        configuration.setAllowedOrigins(List.of(corsProperties.allowedOrigin()));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

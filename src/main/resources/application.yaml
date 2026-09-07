@@ -29,3 +29,5 @@ misfinanzas:
       refresh-token-days: 30
     google:
       client-id: 296166856263-u9ubd4bmvn1nbsnj60iffebpu70p56r9.apps.googleusercontent.com
+    cors:
+      allowed-origin: http://localhost:5173
