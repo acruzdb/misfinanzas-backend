@@ -39,7 +39,7 @@ public class MonthlySummaryService {
      *
      * @param userId id del usuario
      * @param month  mes a resumir
-     * @return el resumen completo: totales, variación vs. mes anterior,
+     * @return el resumen completo: totales, variaciones vs. mes anterior,
      *         ahorro acumulado y desglose por categoría
      */
     @Transactional(readOnly = true)
@@ -50,30 +50,8 @@ public class MonthlySummaryService {
         BigDecimal income = transactionRepository.sumByUserTypeAndDateRange(userId, "income", start, end);
         BigDecimal expense = transactionRepository.sumByUserTypeAndDateRange(userId, "expense", start, end);
         BigDecimal netSavings = income.subtract(expense);
-
-        BigDecimal changePercent = calculateChangeVsPreviousMonth(userId, month, netSavings);
         BigDecimal totalSavedAllTime = transactionRepository.sumNetAllTimeForUser(userId);
-        List<CategoryBreakdown> breakdown = buildBreakdown(userId, start, end);
 
-        return new MonthlySummaryResponse(month, income, expense, netSavings, changePercent, totalSavedAllTime, breakdown);
-    }
-
-    /**
-     * Calcula la variación porcentual del ahorro neto respecto al mes anterior.
-     * <p>
-     * Devuelve {@code null} en vez de lanzar una división por cero cuando
-     * el mes anterior tuvo ahorro neto exactamente cero — en ese caso el
-     * porcentaje de variación no tiene un valor matemáticamente sensato
-     * que mostrar, y es mejor que el frontend decida cómo representar
-     * "sin dato" (por ejemplo, ocultando la flecha de tendencia) en vez
-     * de recibir un número engañoso.
-     *
-     * @param userId            id del usuario
-     * @param month             mes actual
-     * @param currentNetSavings ahorro neto ya calculado del mes actual
-     * @return variación porcentual, o {@code null} si no es calculable
-     */
-    private BigDecimal calculateChangeVsPreviousMonth(UUID userId, YearMonth month, BigDecimal currentNetSavings) {
         YearMonth previousMonth = month.minusMonths(1);
         BigDecimal previousIncome = transactionRepository.sumByUserTypeAndDateRange(
                 userId, "income", previousMonth.atDay(1), previousMonth.atEndOfMonth());
@@ -81,24 +59,45 @@ public class MonthlySummaryService {
                 userId, "expense", previousMonth.atDay(1), previousMonth.atEndOfMonth());
         BigDecimal previousNetSavings = previousIncome.subtract(previousExpense);
 
-        if (previousNetSavings.compareTo(BigDecimal.ZERO) == 0) {
-            return null;
-        }
+        // El acumulado "antes de este mes" se deriva del acumulado total menos
+        // el neto de este mes, en vez de lanzar otra consulta a la base de
+        // datos -- ya tenemos todo lo necesario en memoria.
+        BigDecimal previousTotalSaved = totalSavedAllTime.subtract(netSavings);
 
-        return currentNetSavings.subtract(previousNetSavings)
-                .divide(previousNetSavings.abs(), 4, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100));
+        BigDecimal incomeChange = percentChange(income, previousIncome);
+        BigDecimal expenseChange = percentChange(expense, previousExpense);
+        BigDecimal savingsChange = percentChange(netSavings, previousNetSavings);
+        BigDecimal totalSavedChange = percentChange(totalSavedAllTime, previousTotalSaved);
+
+        List<CategoryBreakdown> breakdown = buildBreakdown(userId, start, end);
+
+        return new MonthlySummaryResponse(
+                month, income, expense, netSavings, savingsChange,
+                incomeChange, expenseChange, totalSavedAllTime, totalSavedChange, breakdown
+        );
     }
 
     /**
-     * Construye el desglose de gastos por categoría, resolviendo nombre
-     * y color a partir de los ids agrupados por la consulta.
+     * Calcula la variación porcentual entre dos valores.
+     * <p>
+     * Devuelve {@code null} en vez de dividir por cero cuando el valor
+     * anterior es exactamente cero — no hay un porcentaje de variación
+     * matemáticamente sensato en ese caso, y es mejor que el frontend
+     * decida cómo representar "sin dato" que recibir un número engañoso.
      *
-     * @param userId id del usuario
-     * @param start  inicio del rango de fechas
-     * @param end    fin del rango de fechas
-     * @return desglose legible, uno por categoría con gasto en el mes
+     * @param current  valor del periodo actual
+     * @param previous valor del periodo de comparación
+     * @return variación porcentual, o {@code null} si no es calculable
      */
+    private BigDecimal percentChange(BigDecimal current, BigDecimal previous) {
+        if (previous.compareTo(BigDecimal.ZERO) == 0) {
+            return null;
+        }
+        return current.subtract(previous)
+                .divide(previous.abs(), 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100));
+    }
+
     private List<CategoryBreakdown> buildBreakdown(UUID userId, LocalDate start, LocalDate end) {
         List<Object[]> rows = transactionRepository.sumExpensesByCategoryForUser(userId, start, end);
         if (rows.isEmpty()) {
@@ -120,11 +119,6 @@ public class MonthlySummaryService {
                 return new CategoryBreakdown(null, "Sin categoría", "#6B7280", amount);
             }
             Category category = categoriesById.get(categoryId);
-            // La categoría podría haber sido borrada después de que el
-            // movimiento se creara con ella; el movimiento sigue existiendo
-            // (categoryId se pone a NULL por ON DELETE SET NULL en la BD,
-            // así que en la práctica esta rama solo cubre una carrera muy
-            // estrecha, pero es más seguro no asumir que siempre existe).
             String name = category != null ? category.getName() : "Categoría eliminada";
             String color = category != null ? category.getColorHex() : "#6B7280";
             return new CategoryBreakdown(categoryId, name, color, amount);

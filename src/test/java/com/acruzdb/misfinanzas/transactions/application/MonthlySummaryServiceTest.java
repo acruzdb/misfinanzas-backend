@@ -12,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.YearMonth;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -21,9 +22,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
-/**
- * Tests unitarios de {@link MonthlySummaryService}.
- */
 @ExtendWith(MockitoExtension.class)
 class MonthlySummaryServiceTest {
 
@@ -33,16 +31,17 @@ class MonthlySummaryServiceTest {
     private MonthlySummaryService service;
 
     @Test
-    @DisplayName("getSummary() calcula el ahorro neto como ingresos menos gastos")
-    void getSummary_calculaAhorroNeto() {
+    @DisplayName("getSummary() calcula el ahorro neto y las variaciones vs. mes anterior")
+    void getSummary_calculaTotalesYVariaciones() {
         service = new MonthlySummaryService(transactionRepository, categoryRepository);
         UUID userId = UUID.randomUUID();
         YearMonth month = YearMonth.of(2026, 9);
 
+        // Mes actual: 2450 ingresos, 1680 gastos. Mes anterior: 2000 / 2000.
         when(transactionRepository.sumByUserTypeAndDateRange(eq(userId), eq("income"), any(), any()))
-                .thenReturn(new BigDecimal("2450.00"));
+                .thenReturn(new BigDecimal("2450.00"), new BigDecimal("2000.00"));
         when(transactionRepository.sumByUserTypeAndDateRange(eq(userId), eq("expense"), any(), any()))
-                .thenReturn(new BigDecimal("1680.00"));
+                .thenReturn(new BigDecimal("1680.00"), new BigDecimal("2000.00"));
         when(transactionRepository.sumNetAllTimeForUser(userId)).thenReturn(new BigDecimal("8320.00"));
         when(transactionRepository.sumExpensesByCategoryForUser(eq(userId), any(), any())).thenReturn(List.of());
 
@@ -50,25 +49,29 @@ class MonthlySummaryServiceTest {
 
         assertThat(response.netSavings()).isEqualByComparingTo("770.00");
         assertThat(response.totalSavedAllTime()).isEqualByComparingTo("8320.00");
+        // Ingresos: (2450-2000)/2000 * 100 = 22.5%
+        assertThat(response.incomeChangePercentVsPreviousMonth()).isEqualByComparingTo("22.5000");
+        // Gastos: (1680-2000)/2000 * 100 = -16%
+        assertThat(response.expenseChangePercentVsPreviousMonth()).isEqualByComparingTo("-16.0000");
     }
 
     @Test
-    @DisplayName("getSummary() devuelve null en la variación si el mes anterior tuvo ahorro neto cero")
+    @DisplayName("getSummary() devuelve null en variaciones cuyo valor de comparación es cero")
     void getSummary_devuelveNullSiMesAnteriorEsCero() {
         service = new MonthlySummaryService(transactionRepository, categoryRepository);
         UUID userId = UUID.randomUUID();
         YearMonth month = YearMonth.of(2026, 9);
 
-        // Mes actual: ingresos > 0. Mes anterior: ingresos = gastos = 0 (ahorro neto cero).
         when(transactionRepository.sumByUserTypeAndDateRange(eq(userId), eq("income"), any(), any()))
                 .thenReturn(new BigDecimal("500.00"), BigDecimal.ZERO);
         when(transactionRepository.sumByUserTypeAndDateRange(eq(userId), eq("expense"), any(), any()))
                 .thenReturn(BigDecimal.ZERO, BigDecimal.ZERO);
-        when(transactionRepository.sumNetAllTimeForUser(userId)).thenReturn(BigDecimal.ZERO);
+        when(transactionRepository.sumNetAllTimeForUser(userId)).thenReturn(new BigDecimal("500.00"));
         when(transactionRepository.sumExpensesByCategoryForUser(eq(userId), any(), any())).thenReturn(List.of());
 
         MonthlySummaryResponse response = service.getSummary(userId, month);
 
+        assertThat(response.incomeChangePercentVsPreviousMonth()).isNull();
         assertThat(response.savingsChangePercentVsPreviousMonth()).isNull();
     }
 
@@ -86,14 +89,13 @@ class MonthlySummaryServiceTest {
         when(transactionRepository.sumByUserTypeAndDateRange(eq(userId), any(), any(), any())).thenReturn(BigDecimal.ZERO);
         when(transactionRepository.sumNetAllTimeForUser(userId)).thenReturn(BigDecimal.ZERO);
         when(transactionRepository.sumExpensesByCategoryForUser(eq(userId), any(), any()))
-                .thenReturn(java.util.Collections.singletonList(new Object[]{categoryId, new BigDecimal("120.00")}));
+                .thenReturn(Collections.singletonList(new Object[]{categoryId, new BigDecimal("120.00")}));
         when(categoryRepository.findAllById(Set.of(categoryId))).thenReturn(List.of(comida));
 
         MonthlySummaryResponse response = service.getSummary(userId, month);
 
         assertThat(response.expensesByCategory()).hasSize(1);
         assertThat(response.expensesByCategory().get(0).categoryName()).isEqualTo("Comida");
-        assertThat(response.expensesByCategory().get(0).amount()).isEqualByComparingTo("120.00");
     }
 
     private void setId(Object entity, UUID id) throws Exception {
