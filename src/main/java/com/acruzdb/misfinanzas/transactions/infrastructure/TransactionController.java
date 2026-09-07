@@ -3,8 +3,10 @@ package com.acruzdb.misfinanzas.transactions.infrastructure;
 import com.acruzdb.misfinanzas.auth.domain.User;
 import com.acruzdb.misfinanzas.auth.infrastructure.AuthenticatedUser;
 import com.acruzdb.misfinanzas.auth.infrastructure.UserRepository;
+import com.acruzdb.misfinanzas.transactions.application.MonthlySummaryService;
 import com.acruzdb.misfinanzas.transactions.application.TransactionService;
 import com.acruzdb.misfinanzas.transactions.dto.CreateTransactionRequest;
+import com.acruzdb.misfinanzas.transactions.dto.MonthlySummaryResponse;
 import com.acruzdb.misfinanzas.transactions.dto.TransactionResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -13,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,10 +34,13 @@ public class TransactionController {
 
     private final TransactionService transactionService;
     private final UserRepository userRepository;
+    private final MonthlySummaryService monthlySummaryService;
 
-    public TransactionController(TransactionService transactionService, UserRepository userRepository) {
+    public TransactionController(TransactionService transactionService, UserRepository userRepository,
+                                 MonthlySummaryService monthlySummaryService) {
         this.transactionService = transactionService;
         this.userRepository = userRepository;
+        this.monthlySummaryService = monthlySummaryService;
     }
 
     /**
@@ -89,5 +95,21 @@ public class TransactionController {
     public ResponseEntity<Void> delete(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser principal) {
         transactionService.delete(id, principal.id());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Resumen financiero del usuario autenticado para un mes concreto.
+     *
+     * @param principal usuario autenticado
+     * @param month     mes en formato {@code YYYY-MM} (p.ej. {@code 2026-09});
+     *                  si se omite, se usa el mes actual
+     * @return el resumen mensual completo
+     */
+    @GetMapping("/summary")
+    public ResponseEntity<MonthlySummaryResponse> summary(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam(required = false) String month) {
+        YearMonth targetMonth = (month != null) ? YearMonth.parse(month) : YearMonth.now();
+        return ResponseEntity.ok(monthlySummaryService.getSummary(principal.id(), targetMonth));
     }
 }
