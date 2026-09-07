@@ -40,7 +40,7 @@ application-*.yml
 
 # Docker
 *.env
-*.env.docker
+.env.docker
 
 # OS
 .DS_Store
