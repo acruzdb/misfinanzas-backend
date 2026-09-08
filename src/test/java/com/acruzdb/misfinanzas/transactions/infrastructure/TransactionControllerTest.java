@@ -106,7 +106,7 @@ class TransactionControllerTest {
         // el test centrado en el "camino feliz" simple del POST.
         CreateTransactionRequest request = new CreateTransactionRequest(
                 "expense", new BigDecimal("45.90"), LocalDate.now(), "Mercadona", null, null
-        );
+        , null);
 
         mockMvc.perform(post("/api/transactions")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -137,7 +137,7 @@ class TransactionControllerTest {
 
         CreateTransactionRequest request = new CreateTransactionRequest(
                 "expense", new BigDecimal("10.00"), LocalDate.now(), null, null, null
-        );
+                , null);
 
         mockMvc.perform(post("/api/transactions")
                         .contentType(MediaType.APPLICATION_JSON)

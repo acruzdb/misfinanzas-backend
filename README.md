@@ -1,27 +1,28 @@
 # MisFinanzas — Backend
 
-Aplicación de finanzas personales y compartidas (pareja / piso compartido), con dashboard, categorización de movimientos, import/export de Excel y, en fases futuras, informes generados por IA y conexión bancaria (Open Banking).
+Aplicación de finanzas personales y compartidas (pareja / piso compartido), con dashboard, categorización de movimientos, import/export de Excel, grupos compartidos con reparto de gastos y balances estilo Tricount. En fases futuras, informes generados por IA.
 
-Este repositorio contiene el **backend** (API REST). El frontend (React / React Native) vive en un repositorio aparte.
+Este repositorio contiene el **backend** (API REST). El frontend (React) vive en [`misfinanzas-frontend`](../misfinanzas-frontend).
 
 ## Stack
 
-- **Java 21/22** + **Spring Boot 4.1.1**
+- **Java 21** + **Spring Boot 4.1.1**
 - **PostgreSQL 16**
 - **Spring Security** con JWT propio (login vía Google OAuth2)
 - **JPA / Hibernate**
+- **Apache POI** para import de extractos Excel
+- **Bucket4j** para rate limiting
 - **JUnit 5 + Mockito + AssertJ** para tests
-- Configuración en **YAML** (`application.yml`)
+- Configuración en **YAML**, perfiles `dev`/`prod` separados
 - Arquitectura: **monolito modular** con **arquitectura hexagonal** por módulo
+- Desplegado en **Railway** (backend + PostgreSQL gestionado)
 
-Para el razonamiento detrás de estas decisiones, ver [`docs/ARQUITECTURA_Y_TESTS.docx`](docs/ARQUITECTURA_Y_TESTS.docx).
+Para el razonamiento detrás de estas decisiones, ver [`docs/ARQUITECTURA_Y_TESTS.docx`](docs/ARQUITECTURA_Y_TESTS.docx) y [`docs/DOCKER.docx`](docs/DOCKER.docx).
 
 ## Estructura de paquetes
 
 Paquete raíz: `com.acruzdb.misfinanzas`
 
-```
-com.acruzdb.misfinanzas/
 ├── auth/            → Usuarios, login (Google + JWT), sesiones
 ├── categories/       → Categorías/etiquetas de movimientos
 ├── transactions/      → Ingresos y gastos, resumen mensual

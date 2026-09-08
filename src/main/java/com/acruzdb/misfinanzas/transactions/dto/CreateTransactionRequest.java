@@ -4,6 +4,7 @@ import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -18,7 +19,6 @@ import java.util.UUID;
  *                         {@code null} significa movimiento personal
  */
 public record CreateTransactionRequest(
-
         @NotNull(message = "El tipo es obligatorio")
         @Pattern(regexp = "income|expense", message = "El tipo debe ser 'income' o 'expense'")
         String type,
@@ -32,8 +32,10 @@ public record CreateTransactionRequest(
         LocalDate transactionDate,
 
         String description,
-
         UUID categoryId,
+        UUID householdId,
 
-        UUID householdId
+        // Reparto personalizado, opcional. Si es null o vacío, el gasto
+        // se reparte a partes iguales entre todos los miembros del household.
+        List<SplitInput> splits
 ) {}

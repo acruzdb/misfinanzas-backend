@@ -3,18 +3,24 @@ package com.acruzdb.misfinanzas.transactions.application;
 import com.acruzdb.misfinanzas.auth.domain.User;
 import com.acruzdb.misfinanzas.categories.domain.Category;
 import com.acruzdb.misfinanzas.categories.infrastructure.CategoryRepository;
+import com.acruzdb.misfinanzas.shared.domain.HouseholdMember;
 import com.acruzdb.misfinanzas.shared.infrastructure.HouseholdMemberRepository;
+import com.acruzdb.misfinanzas.transactions.domain.ExpenseSplit;
 import com.acruzdb.misfinanzas.transactions.domain.Transaction;
 import com.acruzdb.misfinanzas.transactions.dto.CreateTransactionRequest;
+import com.acruzdb.misfinanzas.transactions.dto.SplitInput;
 import com.acruzdb.misfinanzas.transactions.dto.TransactionResponse;
+import com.acruzdb.misfinanzas.transactions.infrastructure.ExpenseSplitRepository;
 import com.acruzdb.misfinanzas.transactions.infrastructure.TransactionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
-import java.util.List;
-import java.util.UUID;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Lógica de negocio del módulo de movimientos.
@@ -31,43 +37,140 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final CategoryRepository categoryRepository;
     private final HouseholdMemberRepository householdMemberRepository;
+    private final ExpenseSplitRepository expenseSplitRepository;
 
     public TransactionService(TransactionRepository transactionRepository,
                               CategoryRepository categoryRepository,
-                              HouseholdMemberRepository householdMemberRepository) {
+                              HouseholdMemberRepository householdMemberRepository,
+                              ExpenseSplitRepository expenseSplitRepository) {
         this.transactionRepository = transactionRepository;
         this.categoryRepository = categoryRepository;
         this.householdMemberRepository = householdMemberRepository;
+        this.expenseSplitRepository = expenseSplitRepository;
     }
 
     /**
      * Da de alta un nuevo movimiento para el usuario indicado.
+     * <p>
+     * Si es un gasto de household, genera además su reparto: el indicado
+     * explícitamente en {@code request.splits()}, o a partes iguales entre
+     * todos los miembros si no se especifica ninguno.
      *
-     * @param user     usuario propietario del movimiento (ya cargado de BD)
+     * @param user     usuario propietario del movimiento
      * @param request  datos validados del movimiento a crear
-     * @return el movimiento creado, ya con su id asignado
-     * @throws ResponseStatusException 400 si se indica un {@code categoryId}
-     *         que no existe o no es visible para el usuario; 403 si se
-     *         indica un {@code householdId} del que el usuario no es miembro
+     * @return el movimiento creado
+     * @throws ResponseStatusException 400 si la categoría o el reparto no son
+     *         válidos; 403 si el household indicado no es tuyo
      */
     @Transactional
     public TransactionResponse create(User user, CreateTransactionRequest request) {
         if (request.categoryId() != null) {
             validateCategoryAccess(request.categoryId(), user.getId());
         }
+
+        List<User> householdMembers = null;
         if (request.householdId() != null) {
-            validateHouseholdMembership(request.householdId(), user.getId());
+            householdMembers = requireMembershipAndListMembers(request.householdId(), user.getId());
         }
 
-        Transaction transaction = new Transaction(
-                user, request.type(), request.amount(), request.transactionDate()
-        );
+        Transaction transaction = new Transaction(user, request.type(), request.amount(), request.transactionDate());
         transaction.setDescription(request.description());
         transaction.setCategoryId(request.categoryId());
         transaction.setHouseholdId(request.householdId());
 
         Transaction saved = transactionRepository.save(transaction);
+
+        if (householdMembers != null && "expense".equals(request.type())) {
+            List<ExpenseSplit> splits = buildSplits(saved, request.splits(), householdMembers, request.amount());
+            expenseSplitRepository.saveAll(splits);
+        }
+
         return TransactionResponse.from(saved);
+    }
+
+    /**
+     * Comprueba que el usuario pertenece al household y devuelve la lista
+     * de todos sus miembros — se necesita de todas formas para el reparto
+     * por defecto, así que evitamos una segunda consulta después.
+     */
+    private List<User> requireMembershipAndListMembers(UUID householdId, UUID userId) {
+        List<HouseholdMember> members = householdMemberRepository.findByHouseholdId(householdId);
+        boolean isMember = members.stream().anyMatch(m -> Objects.equals(m.getUser().getId(), userId));
+        if (!isMember) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No perteneces a ese household");
+        }
+        return members.stream().map(HouseholdMember::getUser).toList();
+    }
+
+    private List<ExpenseSplit> buildSplits(Transaction transaction, List<SplitInput> requested,
+                                           List<User> householdMembers, BigDecimal totalAmount) {
+        if (requested != null && !requested.isEmpty()) {
+            return buildCustomSplits(transaction, requested, householdMembers, totalAmount);
+        }
+        return buildEqualSplits(transaction, householdMembers, totalAmount);
+    }
+
+    /**
+     * Construye el reparto a partir de las partes indicadas explícitamente
+     * por el usuario, validando que cada participante pertenece al
+     * household y que la suma coincide exactamente con el importe total.
+     */
+    private List<ExpenseSplit> buildCustomSplits(Transaction transaction, List<SplitInput> requested,
+                                                 List<User> householdMembers, BigDecimal totalAmount) {
+        Map<UUID, User> membersById = householdMembers.stream().collect(Collectors.toMap(User::getId, u -> u));
+
+        BigDecimal sum = BigDecimal.ZERO;
+        List<ExpenseSplit> splits = new ArrayList<>();
+        for (SplitInput input : requested) {
+            User participant = membersById.get(input.userId());
+            if (participant == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Uno de los participantes del reparto no pertenece a este household");
+            }
+            sum = sum.add(input.shareAmount());
+            splits.add(new ExpenseSplit(transaction, participant, input.shareAmount()));
+        }
+        if (sum.compareTo(totalAmount) != 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La suma del reparto (" + sum + ") no coincide con el importe del movimiento (" + totalAmount + ")");
+        }
+        return splits;
+    }
+
+    private List<ExpenseSplit> buildEqualSplits(Transaction transaction, List<User> householdMembers, BigDecimal totalAmount) {
+        List<BigDecimal> shares = divideEqually(totalAmount, householdMembers.size());
+        List<ExpenseSplit> splits = new ArrayList<>();
+        for (int i = 0; i < householdMembers.size(); i++) {
+            splits.add(new ExpenseSplit(transaction, householdMembers.get(i), shares.get(i)));
+        }
+        return splits;
+    }
+
+    /**
+     * Reparte un importe entre {@code n} personas a partes iguales,
+     * garantizando que la suma de las partes coincide EXACTAMENTE con el
+     * importe original.
+     * <p>
+     * Una división simple ({@code amount / n}) puede perder o sobrar
+     * céntimos por redondeo (10.00 € entre 3 personas no da un número
+     * exacto de céntimos). El resto se reparte de uno en uno entre las
+     * primeras personas de la lista hasta que la suma cuadra del todo.
+     *
+     * @param amount importe total a repartir
+     * @param n      número de participantes
+     * @return una parte por participante, en el mismo orden recibido
+     */
+    private List<BigDecimal> divideEqually(BigDecimal amount, int n) {
+        BigDecimal base = amount.divide(BigDecimal.valueOf(n), 2, RoundingMode.DOWN);
+        BigDecimal distributed = base.multiply(BigDecimal.valueOf(n));
+        BigDecimal remainderCents = amount.subtract(distributed).divide(new BigDecimal("0.01"));
+        int extraCents = remainderCents.intValue();
+
+        List<BigDecimal> shares = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            shares.add(i < extraCents ? base.add(new BigDecimal("0.01")) : base);
+        }
+        return shares;
     }
 
     /**

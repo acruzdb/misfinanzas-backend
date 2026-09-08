@@ -3,10 +3,9 @@ package com.acruzdb.misfinanzas.shared.infrastructure;
 import com.acruzdb.misfinanzas.auth.domain.User;
 import com.acruzdb.misfinanzas.auth.infrastructure.AuthenticatedUser;
 import com.acruzdb.misfinanzas.auth.infrastructure.UserRepository;
+import com.acruzdb.misfinanzas.shared.application.BalanceService;
 import com.acruzdb.misfinanzas.shared.application.HouseholdService;
-import com.acruzdb.misfinanzas.shared.dto.AddMemberRequest;
-import com.acruzdb.misfinanzas.shared.dto.CreateHouseholdRequest;
-import com.acruzdb.misfinanzas.shared.dto.HouseholdResponse;
+import com.acruzdb.misfinanzas.shared.dto.*;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,10 +25,12 @@ public class HouseholdController {
 
     private final HouseholdService householdService;
     private final UserRepository userRepository;
+    private final BalanceService balanceService;
 
-    public HouseholdController(HouseholdService householdService, UserRepository userRepository) {
+    public HouseholdController(HouseholdService householdService, UserRepository userRepository, BalanceService balanceService) {
         this.householdService = householdService;
         this.userRepository = userRepository;
+        this.balanceService = balanceService;
     }
 
     /** Crea un nuevo household; el usuario autenticado queda como owner. */
@@ -69,5 +70,21 @@ public class HouseholdController {
     public ResponseEntity<Void> leave(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser principal) {
         householdService.leave(id, principal.id());
         return ResponseEntity.noContent().build();
+    }
+
+    /** Balances netos del household y transferencias sugeridas para saldarlos. */
+    @GetMapping("/{id}/balances")
+    public ResponseEntity<BalanceResponse> balances(
+            @PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser principal) {
+        return ResponseEntity.ok(balanceService.computeBalances(id, principal.id()));
+    }
+
+    /** Registra que el usuario autenticado ya le pagó a otro miembro del household. */
+    @PostMapping("/{id}/settlements")
+    public ResponseEntity<Void> recordSettlement(
+            @PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser principal,
+            @Valid @RequestBody RecordSettlementRequest request) {
+        balanceService.recordSettlement(id, principal.id(), request.toUserId(), request.amount());
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 }
