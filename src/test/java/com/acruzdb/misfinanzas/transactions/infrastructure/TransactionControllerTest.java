@@ -98,7 +98,7 @@ class TransactionControllerTest {
 
         TransactionResponse fakeResponse = new TransactionResponse(
                 UUID.randomUUID(), "expense", new BigDecimal("45.90"), "EUR",
-                "Mercadona", LocalDate.now(), null, null
+                "Mercadona", LocalDate.now(), null, null, authenticatedUserId, "Alex"
         );
         when(transactionService.create(eq(user), any())).thenReturn(fakeResponse);
 
@@ -150,7 +150,7 @@ class TransactionControllerTest {
     void list_devuelve200ConLista() throws Exception {
         TransactionResponse response = new TransactionResponse(
                 UUID.randomUUID(), "income", new BigDecimal("2450.00"), "EUR",
-                "Nómina", LocalDate.now(), null, null
+                "Nómina", LocalDate.now(), null, null, authenticatedUserId, "Alex"
         );
         when(transactionService.listForUser(authenticatedUserId)).thenReturn(List.of(response));
 

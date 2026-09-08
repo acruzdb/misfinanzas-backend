@@ -157,4 +157,23 @@ public class TransactionService {
         }
         transactionRepository.delete(transaction);
     }
+
+    /**
+     * Lista los movimientos de un household, de cualquiera de sus
+     * miembros, no solo los del solicitante — es la diferencia clave
+     * frente a listForUser(), pensada para la vista de gastos compartidos.
+     *
+     * @param householdId id del household
+     * @param requesterId id del usuario que hace la petición; debe ser miembro
+     * @return movimientos del grupo, del más reciente al más antiguo
+     * @throws ResponseStatusException 403 si el solicitante no pertenece al household
+     */
+    @Transactional(readOnly = true)
+    public List<TransactionResponse> listForHousehold(UUID householdId, UUID requesterId) {
+        validateHouseholdMembership(householdId, requesterId);
+        return transactionRepository.findByHouseholdIdOrderByTransactionDateDesc(householdId)
+                .stream()
+                .map(TransactionResponse::from)
+                .toList();
+    }
 }

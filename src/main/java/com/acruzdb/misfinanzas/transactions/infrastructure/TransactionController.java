@@ -61,13 +61,21 @@ public class TransactionController {
     }
 
     /**
-     * Lista los movimientos del usuario, del más reciente al más antiguo.
+     * Lista movimientos: los personales del usuario autenticado, o los de
+     * un household si se indica householdId (en ese caso, de todos sus
+     * miembros, no solo del solicitante).
      *
-     * @param principal id del usuario (temporal, ver nota de clase)
-     * @return 200 OK con la lista de movimientos
+     * @param principal   usuario autenticado
+     * @param householdId opcional; si se indica, se listan los del grupo
+     * @return 200 OK con la lista correspondiente
      */
     @GetMapping
-    public ResponseEntity<List<TransactionResponse>> list(@AuthenticationPrincipal AuthenticatedUser principal) {
+    public ResponseEntity<List<TransactionResponse>> list(
+            @AuthenticationPrincipal AuthenticatedUser principal,
+            @RequestParam(required = false) UUID householdId) {
+        if (householdId != null) {
+            return ResponseEntity.ok(transactionService.listForHousehold(householdId, principal.id()));
+        }
         return ResponseEntity.ok(transactionService.listForUser(principal.id()));
     }
 

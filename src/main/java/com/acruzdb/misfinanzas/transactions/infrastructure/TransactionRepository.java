@@ -68,4 +68,6 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
             "AND t.transactionDate BETWEEN :start AND :end GROUP BY t.categoryId")
     List<Object[]> sumExpensesByCategoryForUser(@Param("userId") UUID userId,
                                                 @Param("start") LocalDate start, @Param("end") LocalDate end);
+
+    List<Transaction> findByHouseholdIdOrderByTransactionDateDesc(UUID householdId);
 }
