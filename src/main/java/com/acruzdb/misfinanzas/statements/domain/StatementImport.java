@@ -87,4 +87,6 @@ public class StatementImport {
     public Integer getRowsImported() { return rowsImported; }
     public Integer getRowsFailed() { return rowsFailed; }
     public String getErrorSummary() { return errorSummary; }
+    public String getOriginalFilename() { return originalFilename; }
+    public java.time.OffsetDateTime getCreatedAt() { return createdAt; }
 }

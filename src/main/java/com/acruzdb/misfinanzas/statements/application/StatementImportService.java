@@ -4,6 +4,7 @@ import com.acruzdb.misfinanzas.auth.domain.User;
 import com.acruzdb.misfinanzas.statements.domain.StatementImport;
 import com.acruzdb.misfinanzas.statements.dto.ColumnMapping;
 import com.acruzdb.misfinanzas.statements.dto.StatementImportResponse;
+import com.acruzdb.misfinanzas.statements.dto.StatementImportSummary;
 import com.acruzdb.misfinanzas.statements.infrastructure.StatementImportRepository;
 import com.acruzdb.misfinanzas.transactions.domain.Transaction;
 import com.acruzdb.misfinanzas.transactions.infrastructure.TransactionRepository;
@@ -35,6 +36,8 @@ import java.util.UUID;
  */
 @Service
 public class StatementImportService {
+
+    private static final int RECENT_IMPORTS_LIMIT = 10;
 
     // Formatos de fecha que aceptamos, en orden de intento. dd/MM/yyyy es
     // el más común en extractos españoles; ISO (yyyy-MM-dd) se añade como
@@ -200,5 +203,20 @@ public class StatementImportService {
     /** Excepción interna: una fila concreta no se pudo interpretar. No es un error fatal para toda la importación. */
     private static class RowParseException extends RuntimeException {
         RowParseException(String message) { super(message); }
+    }
+
+    /**
+     * Historial reciente de importaciones del usuario, para mostrar en
+     * la pantalla de Importar -- qué ficheros ha subido y cuándo.
+     *
+     * @param userId id del usuario
+     * @return las últimas {@value #RECENT_IMPORTS_LIMIT} importaciones, más reciente primero
+     */
+    @Transactional(readOnly = true)
+    public List<StatementImportSummary> listRecent(UUID userId) {
+        return statementImportRepository.findByUser_IdOrderByCreatedAtDesc(userId).stream()
+                .limit(RECENT_IMPORTS_LIMIT)
+                .map(StatementImportSummary::from)
+                .toList();
     }
 }

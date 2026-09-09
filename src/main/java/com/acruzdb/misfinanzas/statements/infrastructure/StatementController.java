@@ -1,19 +1,22 @@
 package com.acruzdb.misfinanzas.statements.infrastructure;
 
-import com.acruzdb.misfinanzas.auth.domain.User;
 import com.acruzdb.misfinanzas.auth.infrastructure.AuthenticatedUser;
-import com.acruzdb.misfinanzas.auth.infrastructure.UserRepository;
 import com.acruzdb.misfinanzas.statements.application.ExcelParsingService;
 import com.acruzdb.misfinanzas.statements.application.StatementImportService;
 import com.acruzdb.misfinanzas.statements.dto.ConfirmImportRequest;
 import com.acruzdb.misfinanzas.statements.dto.StatementImportResponse;
+import com.acruzdb.misfinanzas.statements.dto.StatementImportSummary;
 import com.acruzdb.misfinanzas.statements.dto.StatementPreviewResponse;
+import com.acruzdb.misfinanzas.auth.domain.User;
+import com.acruzdb.misfinanzas.auth.infrastructure.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
 
 /**
  * API REST del módulo de extractos (import/export de movimientos vía fichero).
@@ -23,15 +26,15 @@ import org.springframework.web.server.ResponseStatusException;
 public class StatementController {
 
     private final ExcelParsingService excelParsingService;
-
+    private final StatementImportService statementImportService;
     private final UserRepository userRepository;
 
-    private final StatementImportService statementImportService;
-
-    public StatementController(ExcelParsingService excelParsingService, UserRepository userRepository, StatementImportService statementImportService) {
+    public StatementController(ExcelParsingService excelParsingService,
+                               StatementImportService statementImportService,
+                               UserRepository userRepository) {
         this.excelParsingService = excelParsingService;
-        this.userRepository = userRepository;
         this.statementImportService = statementImportService;
+        this.userRepository = userRepository;
     }
 
     /**
@@ -63,5 +66,16 @@ public class StatementController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
         StatementImportResponse response = statementImportService.importFile(file, request.mapping(), user, request.householdId());
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Historial de importaciones recientes del usuario autenticado.
+     *
+     * @param principal usuario autenticado
+     * @return las últimas importaciones, más reciente primero
+     */
+    @GetMapping
+    public ResponseEntity<List<StatementImportSummary>> listRecent(@AuthenticationPrincipal AuthenticatedUser principal) {
+        return ResponseEntity.ok(statementImportService.listRecent(principal.id()));
     }
 }
