@@ -79,12 +79,12 @@ public class HouseholdController {
         return ResponseEntity.ok(balanceService.computeBalances(id, principal.id()));
     }
 
-    /** Registra que el usuario autenticado ya le pagó a otro miembro del household. */
+    /** Registra una liquidación real entre dos miembros del household (el solicitante debe ser una de las dos partes). */
     @PostMapping("/{id}/settlements")
     public ResponseEntity<Void> recordSettlement(
             @PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody RecordSettlementRequest request) {
-        balanceService.recordSettlement(id, principal.id(), request.toUserId(), request.amount());
+        balanceService.recordSettlement(id, principal.id(), request.fromUserId(), request.toUserId(), request.amount());
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 }

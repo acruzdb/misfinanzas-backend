@@ -110,35 +110,47 @@ public class BalanceService {
     }
 
     /**
-     * Registra que el usuario autenticado ya le pagó a otro miembro del
-     * household una cantidad concreta, para que deje de contar en los
-     * balances pendientes.
+     * Registra una liquidación real entre dos miembros del household.
+     * <p>
+     * El usuario autenticado ({@code requesterId}) debe ser una de las dos
+     * partes de la liquidación (pagador o receptor) — así puedes registrar
+     * tanto "yo le pagué a X" como "X me pagó a mí", pero no inventar una
+     * liquidación entre otras dos personas que no te involucran.
      *
      * @param householdId id del household
-     * @param fromUserId  quien pagó (el usuario autenticado)
+     * @param requesterId id del usuario autenticado que hace la petición
+     * @param fromUserId  quien pagó en la vida real
      * @param toUserId    quien recibió el pago
      * @param amount      importe liquidado
-     * @throws ResponseStatusException 403 si alguno de los dos no pertenece
-     *         al household; 400 si intentas liquidar contigo mismo
+     * @throws ResponseStatusException 400 si fromUserId y toUserId son la
+     *         misma persona, o si alguna de las dos no pertenece al household;
+     *         403 si el solicitante no es ninguna de las dos partes
      */
     @Transactional
-    public void recordSettlement(UUID householdId, UUID fromUserId, UUID toUserId, BigDecimal amount) {
+    public void recordSettlement(UUID householdId, UUID requesterId, UUID fromUserId, UUID toUserId, BigDecimal amount) {
         if (fromUserId.equals(toUserId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No puedes liquidar una deuda contigo mismo");
         }
-        List<HouseholdMember> members = requireMembership(householdId, fromUserId);
-        boolean toUserIsMember = members.stream().anyMatch(m -> m.getUser().getId().equals(toUserId));
-        if (!toUserIsMember) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El destinatario no pertenece a este household");
+        if (!requesterId.equals(fromUserId) && !requesterId.equals(toUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo puedes registrar liquidaciones en las que participas");
+        }
+
+        List<HouseholdMember> members = requireMembership(householdId, requesterId);
+        boolean fromIsMember = members.stream().anyMatch(m -> m.getUser().getId().equals(fromUserId));
+        boolean toIsMember = members.stream().anyMatch(m -> m.getUser().getId().equals(toUserId));
+        if (!fromIsMember || !toIsMember) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ambas personas deben pertenecer a este household");
         }
 
         Household household = householdRepository.findById(householdId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Household no encontrado"));
-        User fromUser = userRepository.findById(fromUserId).orElseThrow();
+        User fromUser = userRepository.findById(fromUserId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Usuario no encontrado"));
         User toUser = userRepository.findById(toUserId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Destinatario no encontrado"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Usuario no encontrado"));
+        User requester = userRepository.findById(requesterId).orElseThrow();
 
-        settlementRepository.save(new Settlement(household, fromUser, toUser, amount, fromUser));
+        settlementRepository.save(new Settlement(household, fromUser, toUser, amount, requester));
     }
 
     private List<HouseholdMember> requireMembership(UUID householdId, UUID userId) {
